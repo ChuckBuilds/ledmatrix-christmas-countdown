@@ -69,10 +69,16 @@ class ChristmasCountdownPlugin(BasePlugin):
         self.logger.info("Christmas countdown plugin initialized")
     
     def _load_tree_image(self) -> None:
-        """Load Christmas tree image from assets directory."""
+        """Load Christmas tree image from plugin directory."""
         try:
             plugin_dir = Path(__file__).parent
-            tree_path = plugin_dir / "assets" / "christmas_tree.png"
+            
+            # Try "tree icon.png" first (newer, better image)
+            tree_path = plugin_dir / "tree icon.png"
+            
+            # Fallback to assets/christmas_tree.png if tree icon.png doesn't exist
+            if not tree_path.exists():
+                tree_path = plugin_dir / "assets" / "christmas_tree.png"
             
             if tree_path.exists():
                 self.tree_image = Image.open(tree_path)
@@ -222,17 +228,35 @@ class ChristmasCountdownPlugin(BasePlugin):
     def _get_tree_image(self, width: int, height: int) -> Optional[Image.Image]:
         """
         Get Christmas tree image at specified dimensions.
+        Preserves aspect ratio and fits within the given dimensions.
         
         Args:
-            width: Desired width in pixels
-            height: Desired height in pixels
+            width: Maximum width in pixels
+            height: Maximum height in pixels
             
         Returns:
-            PIL Image at specified dimensions
+            PIL Image scaled to fit within dimensions while preserving aspect ratio
         """
         if self.tree_image:
-            # Resize existing image to fit the dimensions
-            return self.tree_image.resize((width, height), Image.LANCZOS)
+            # Calculate scaling to fit within dimensions while preserving aspect ratio
+            img_width, img_height = self.tree_image.size
+            width_ratio = width / img_width
+            height_ratio = height / img_height
+            scale_ratio = min(width_ratio, height_ratio)  # Use smaller ratio to fit both dimensions
+            
+            # Calculate new dimensions
+            new_width = int(img_width * scale_ratio)
+            new_height = int(img_height * scale_ratio)
+            
+            # Resize image preserving aspect ratio
+            resized = self.tree_image.resize((new_width, new_height), Image.LANCZOS)
+            
+            # If the image has transparency, ensure it's RGBA
+            if resized.mode != 'RGBA' and self.tree_image.mode == 'RGBA':
+                # Convert to RGBA if original was RGBA
+                resized = resized.convert('RGBA')
+            
+            return resized
         else:
             # Draw programmatically with new dimensions
             return self._draw_tree_programmatic(width, height, self.tree_color)
