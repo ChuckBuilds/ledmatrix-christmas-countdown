@@ -61,6 +61,7 @@ class ChristmasCountdownPlugin(BasePlugin):
         self.is_christmas = False
         self.tree_image = None
         self.last_calculated_date = None
+        self.last_displayed_message = None  # Track last displayed to prevent unnecessary redraws
         
         # Load tree image if available
         self._load_tree_image()
@@ -109,31 +110,31 @@ class ChristmasCountdownPlugin(BasePlugin):
         
         return days_diff, is_christmas
     
-    def _draw_tree_programmatic(self, size: int, color: Tuple[int, int, int]) -> Image.Image:
+    def _draw_tree_programmatic(self, width: int, height: int, color: Tuple[int, int, int]) -> Image.Image:
         """
-        Draw a simple Christmas tree programmatically.
+        Draw a fun, detailed Christmas tree programmatically.
         
         Args:
-            size: Size of the tree (width/height)
+            width: Width of the tree area
+            height: Height of the tree area
             color: RGB color for the tree
             
         Returns:
             PIL Image with transparent background
         """
         # Create image with transparent background
-        img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
-        # Tree is a series of triangles (layers)
-        center_x = size // 2
-        base_y = size - size // 4  # Leave room for trunk
+        center_x = width // 2
+        base_y = height - max(3, height // 8)  # Leave room for trunk
         
-        # Draw tree layers (triangles from bottom to top)
-        layer_count = 3
+        # Draw tree layers (triangles from bottom to top) - more layers for bigger tree
+        layer_count = max(4, height // 8)  # More layers for taller trees
         for i in range(layer_count):
-            layer_y = base_y - (i * size // (layer_count + 1))
-            layer_width = size - (i * size // (layer_count + 2))
-            layer_width = max(4, layer_width)  # Minimum width
+            layer_y = base_y - (i * height // (layer_count + 2))
+            layer_width = width - (i * width // (layer_count + 3))
+            layer_width = max(6, layer_width)  # Minimum width
             
             # Triangle points
             top_x = center_x
@@ -148,47 +149,93 @@ class ChristmasCountdownPlugin(BasePlugin):
                 [(top_x, top_y), (left_x, left_y), (right_x, right_y)],
                 fill=color
             )
+            
+            # Add some texture/decoration to layers (smaller triangles for depth)
+            if i > 0 and layer_width > 8:
+                # Add some highlights
+                highlight_color = tuple(min(255, c + 20) for c in color)
+                small_triangle_size = layer_width // 4
+                for offset in [-small_triangle_size // 2, small_triangle_size // 2]:
+                    if abs(offset) < layer_width // 2 - 2:
+                        draw.polygon(
+                            [(center_x + offset, layer_y - small_triangle_size),
+                             (center_x + offset - small_triangle_size // 2, layer_y),
+                             (center_x + offset + small_triangle_size // 2, layer_y)],
+                            fill=highlight_color
+                        )
         
         # Draw trunk (rectangle at bottom center)
-        trunk_width = max(2, size // 8)
-        trunk_height = size // 6
+        trunk_width = max(3, width // 6)
+        trunk_height = max(4, height // 6)
         trunk_x = center_x - trunk_width // 2
-        trunk_y = size - trunk_height
+        trunk_y = height - trunk_height
         trunk_color = (101, 67, 33)  # Brown
         
         draw.rectangle(
-            [trunk_x, trunk_y, trunk_x + trunk_width, size],
+            [trunk_x, trunk_y, trunk_x + trunk_width, height],
             fill=trunk_color
         )
         
-        # Add a star on top (optional, yellow)
-        star_size = max(2, size // 12)
-        star_y = top_y - star_size
+        # Add a star on top (yellow, more detailed)
+        star_size = max(3, min(width // 8, height // 10))
+        star_y = top_y - star_size - 1
         star_color = (255, 255, 0)  # Yellow
+        
+        # Draw star as a filled circle with points
         draw.ellipse(
             [center_x - star_size, star_y - star_size,
              center_x + star_size, star_y + star_size],
             fill=star_color
         )
         
+        # Add ornaments (red circles) on various layers
+        if width >= 16 and height >= 20:
+            ornament_color = (255, 0, 0)  # Red
+            ornament_size = max(1, min(width // 16, 3))
+            
+            # Add ornaments on different layers
+            for layer_idx in [1, 2, 3]:
+                if layer_idx < layer_count:
+                    layer_y = base_y - (layer_idx * height // (layer_count + 2))
+                    layer_width = width - (layer_idx * width // (layer_count + 3))
+                    
+                    # Left ornament
+                    if layer_width > 12:
+                        left_orn_x = center_x - layer_width // 3
+                        draw.ellipse(
+                            [left_orn_x - ornament_size, layer_y - ornament_size,
+                             left_orn_x + ornament_size, layer_y + ornament_size],
+                            fill=ornament_color
+                        )
+                    
+                    # Right ornament (alternating layers)
+                    if layer_idx % 2 == 0 and layer_width > 12:
+                        right_orn_x = center_x + layer_width // 3
+                        draw.ellipse(
+                            [right_orn_x - ornament_size, layer_y - ornament_size,
+                             right_orn_x + ornament_size, layer_y + ornament_size],
+                            fill=ornament_color
+                        )
+        
         return img
     
-    def _get_tree_image(self, target_size: int) -> Optional[Image.Image]:
+    def _get_tree_image(self, width: int, height: int) -> Optional[Image.Image]:
         """
-        Get Christmas tree image at specified size.
+        Get Christmas tree image at specified dimensions.
         
         Args:
-            target_size: Desired size in pixels
+            width: Desired width in pixels
+            height: Desired height in pixels
             
         Returns:
-            PIL Image resized to target_size, or None if unavailable
+            PIL Image at specified dimensions
         """
         if self.tree_image:
-            # Resize existing image
-            return self.tree_image.resize((target_size, target_size), Image.LANCZOS)
+            # Resize existing image to fit the dimensions
+            return self.tree_image.resize((width, height), Image.LANCZOS)
         else:
-            # Draw programmatically
-            return self._draw_tree_programmatic(target_size, self.tree_color)
+            # Draw programmatically with new dimensions
+            return self._draw_tree_programmatic(width, height, self.tree_color)
     
     def update(self) -> None:
         """
@@ -215,7 +262,8 @@ class ChristmasCountdownPlugin(BasePlugin):
     
     def display(self, force_clear: bool = False) -> None:
         """
-        Display the Christmas countdown.
+        Display the Christmas countdown with split-screen layout.
+        Tree on left, stacked text on right.
         
         Args:
             force_clear: If True, clear display before rendering
@@ -225,24 +273,12 @@ class ChristmasCountdownPlugin(BasePlugin):
             if not hasattr(self, 'days_until_christmas'):
                 self.update()
             
-            # Clear display
-            self.display_manager.clear()
-            
             # Get display dimensions
             width = self.display_manager.width
             height = self.display_manager.height
             
             # Determine if display is "small" (use XMAS instead of CHRISTMAS)
             is_small_display = width < 64
-            
-            # Calculate tree size (25-40% of display height, but respect config)
-            if self.tree_size:
-                tree_size = min(self.tree_size, height - 10)
-            else:
-                tree_size = max(16, min(height // 3, 32))
-            
-            # Get tree image
-            tree_img = self._get_tree_image(tree_size)
             
             # Determine text to display
             if self.is_christmas or self.days_until_christmas == 0:
@@ -253,14 +289,30 @@ class ChristmasCountdownPlugin(BasePlugin):
                 else:
                     message = f"{self.days_until_christmas} DAYS UNTIL CHRISTMAS"
             
-            # Calculate layout
-            # Center tree horizontally
-            tree_x = (width - tree_size) // 2
+            # Check if we need to redraw (prevent blinking)
+            # Only redraw if the message changed or force_clear is True
+            if not force_clear and self.last_displayed_message == message:
+                return  # No change, skip redraw
             
-            # Position tree in upper portion
-            tree_y = max(2, (height - tree_size) // 4)
+            # Clear display
+            self.display_manager.clear()
             
-            # Draw tree
+            # Split display in half: tree on left, text on right
+            left_half_width = width // 2
+            right_half_width = width - left_half_width
+            right_half_x = left_half_width
+            
+            # Calculate tree dimensions (use most of left half, leave small margin)
+            tree_margin = 2
+            tree_width = left_half_width - (2 * tree_margin)
+            tree_height = height - (2 * tree_margin)
+            tree_x = tree_margin
+            tree_y = tree_margin
+            
+            # Get tree image (bigger and more fun!)
+            tree_img = self._get_tree_image(tree_width, tree_height)
+            
+            # Draw tree on left side
             if tree_img:
                 # Paste tree onto display (handle RGBA with alpha channel)
                 if tree_img.mode == 'RGBA':
@@ -268,27 +320,63 @@ class ChristmasCountdownPlugin(BasePlugin):
                 else:
                     self.display_manager.image.paste(tree_img, (tree_x, tree_y))
             
-            # Calculate text position (below tree)
-            text_y = tree_y + tree_size + 4
+            # Stack text on right side
+            # Split message into words/lines for stacking
+            if self.is_christmas or self.days_until_christmas == 0:
+                # "MERRY CHRISTMAS" - split into two lines
+                lines = ["MERRY", "CHRISTMAS"]
+            else:
+                # Countdown message - split intelligently
+                if is_small_display:
+                    # "N DAYS UNTIL XMAS"
+                    parts = message.split()
+                    if len(parts) >= 4:
+                        lines = [
+                            f"{self.days_until_christmas}",
+                            "DAYS",
+                            "UNTIL",
+                            "XMAS"
+                        ]
+                    else:
+                        lines = [message]
+                else:
+                    # "N DAYS UNTIL CHRISTMAS"
+                    parts = message.split()
+                    if len(parts) >= 4:
+                        lines = [
+                            f"{self.days_until_christmas}",
+                            "DAYS",
+                            "UNTIL",
+                            "CHRISTMAS"
+                        ]
+                    else:
+                        lines = [message]
             
-            # Ensure text fits on screen
-            if text_y + 10 > height:
-                # Adjust tree position up if needed
-                tree_y = max(2, height - tree_size - 14)
-                text_y = tree_y + tree_size + 4
+            # Calculate text positioning on right side (centered vertically)
+            num_lines = len(lines)
+            line_height = 8 if is_small_display else 10
+            total_text_height = num_lines * line_height
+            start_y = (height - total_text_height) // 2
             
-            # Draw text (centered)
-            self.display_manager.draw_text(
-                message,
-                y=text_y,
-                color=self.text_color,
-                small_font=is_small_display,
-                centered=True
-            )
+            # Draw each line of text, centered horizontally in right half
+            for i, line in enumerate(lines):
+                text_y = start_y + (i * line_height)
+                # Calculate center point of right half for centering
+                right_half_center_x = right_half_x + (right_half_width // 2)
+                self.display_manager.draw_text(
+                    line,
+                    x=right_half_center_x,
+                    y=text_y,
+                    color=self.text_color,
+                    small_font=is_small_display,
+                    centered=True
+                )
             
             # Update the physical display
             self.display_manager.update_display()
             
+            # Track what we displayed to prevent unnecessary redraws
+            self.last_displayed_message = message
             self.logger.debug(f"Displayed: {message}")
             
         except Exception as e:
