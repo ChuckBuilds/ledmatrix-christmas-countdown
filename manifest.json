@@ -1,0 +1,33 @@
+{
+  "id": "christmas-countdown",
+  "name": "Christmas Countdown",
+  "version": "1.0.0",
+  "author": "ChuckBuilds",
+  "description": "Display a countdown to Christmas with a stylized Christmas tree logo and festive text",
+  "category": "holiday",
+  "tags": [
+    "christmas",
+    "countdown",
+    "holiday",
+    "seasonal"
+  ],
+  "entry_point": "manager.py",
+  "class_name": "ChristmasCountdownPlugin",
+  "display_modes": [
+    "christmas-countdown"
+  ],
+  "download_url_template": "https://github.com/ChuckBuilds/ledmatrix-christmas-countdown/archive/refs/tags/v{version}.zip",
+  "versions": [
+    {
+      "released": "2025-01-27",
+      "version": "1.0.0",
+      "ledmatrix_min": "2.0.0"
+    }
+  ],
+  "last_updated": "2025-01-27",
+  "stars": 0,
+  "downloads": 0,
+  "verified": true,
+  "screenshot": ""
+}
+
