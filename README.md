@@ -2,6 +2,11 @@
 
 A festive LEDMatrix plugin that displays a countdown to Christmas with a stylized Christmas tree logo and holiday text.
 
+Screenshot of Christmas Countdown:
+<img width="768" height="192" alt="led_matrix_1765383616554" src="https://github.com/user-attachments/assets/899cb576-e7bc-41ee-853e-100395fc22dc" />
+
+
+
 ## Features
 
 - **Stylized Christmas Tree**: Displays a pixel-art style Christmas tree logo (image or programmatically drawn)
@@ -11,36 +16,6 @@ A festive LEDMatrix plugin that displays a countdown to Christmas with a stylize
 - **Merry Christmas Message**: Automatically shows "MERRY CHRISTMAS" on and after December 25th
 - **Traditional Colors**: Green tree, red text with white accents
 - **Customizable**: Configurable colors and tree size
-
-## Installation
-
-### From GitHub (Recommended)
-
-```bash
-./dev_plugin_setup.sh link-github christmas-countdown
-```
-
-### Manual Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/ChuckBuilds/ledmatrix-christmas-countdown.git
-   ```
-
-2. Link to LEDMatrix plugins directory:
-   ```bash
-   ./dev_plugin_setup.sh link christmas-countdown /path/to/ledmatrix-christmas-countdown
-   ```
-
-3. Enable the plugin in `config/config.json`:
-   ```json
-   {
-     "christmas-countdown": {
-       "enabled": true,
-       "display_duration": 15
-     }
-   }
-   ```
 
 ## Configuration
 
@@ -52,37 +27,7 @@ The plugin supports the following configuration options:
 - `display_duration` (number, default: `15`): How long to display the countdown in seconds (1-300)
 - `update_interval` (integer, default: `3600`): How often to update the countdown in seconds (60-86400). Default is 1 hour since the countdown changes daily.
 
-### Appearance
 
-- `text_color` (array, default: `[255, 0, 0]`): RGB color for the countdown text (default: red)
-- `tree_color` (array, default: `[0, 128, 0]`): RGB color for the Christmas tree (default: green). Only used if tree image is not available.
-- `tree_size` (integer, optional): Size of the Christmas tree logo in pixels (8-64). If not specified, size is auto-calculated based on display height.
-
-### Transitions
-
-- `transition` (object): Transition configuration
-  - `type` (string): Transition type - `redraw`, `fade`, `slide`, `wipe`, `dissolve`, `pixelate` (default: `redraw`)
-  - `speed` (integer): Transition speed 1-10 (default: `2`)
-  - `enabled` (boolean): Enable transitions (default: `true`)
-
-### Example Configuration
-
-```json
-{
-  "christmas-countdown": {
-    "enabled": true,
-    "display_duration": 20,
-    "update_interval": 3600,
-    "text_color": [255, 0, 0],
-    "tree_color": [0, 128, 0],
-    "tree_size": 24,
-    "transition": {
-      "type": "fade",
-      "speed": 3,
-      "enabled": true
-    }
-  }
-}
 ```
 
 ## Display Behavior
