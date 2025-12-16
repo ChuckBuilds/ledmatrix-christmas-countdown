@@ -14,7 +14,7 @@ API Version: 1.0.0
 """
 
 import logging
-from datetime import datetime, date
+from datetime import date
 from typing import Dict, Any, Tuple, Optional
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -93,7 +93,7 @@ class ChristmasCountdownPlugin(BasePlugin):
     def _calculate_days_until_christmas(self) -> Tuple[int, bool]:
         """
         Calculate days until Christmas.
-        
+
         Returns:
             Tuple of (days_until, is_christmas_day)
             - If before Christmas: (positive days, False)
@@ -102,19 +102,144 @@ class ChristmasCountdownPlugin(BasePlugin):
         """
         today = date.today()
         current_year = today.year
-        
+
         # Christmas for current year
         christmas_this_year = date(current_year, 12, 25)
-        
+
         # If we've passed this year's Christmas, calculate for next year
         if today > christmas_this_year:
             christmas_this_year = date(current_year + 1, 12, 25)
-        
+
         # Calculate difference
         days_diff = (christmas_this_year - today).days
         is_christmas = (today.month == 12 and today.day == 25)
-        
+
         return days_diff, is_christmas
+
+    def _calculate_text_layout(self, width: int, height: int, lines: list) -> Dict[str, Any]:
+        """
+        Calculate optimal text layout parameters based on display dimensions.
+
+        Args:
+            width: Display width in pixels
+            height: Display height in pixels
+            lines: List of text lines to display
+
+        Returns:
+            Dict with layout parameters:
+            - font: Font to use
+            - line_height: Height per line in pixels
+            - total_text_height: Total height needed for all lines
+            - start_y: Starting Y position for first line
+            - use_small_font: Boolean indicating if small font should be used
+        """
+        # Calculate available space for text (right half of display)
+        left_half_width = width // 2
+        right_half_width = width - left_half_width
+        available_text_width = right_half_width - 4  # Small margin
+
+        # Calculate available height
+        available_text_height = height - 4  # Small margins top/bottom
+
+        # Determine font to use based on available space and number of lines
+        num_lines = len(lines)
+
+        # Calculate text dimensions for different font options (try largest first)
+        font_options = [
+            (self.display_manager.regular_font, False),
+            (self.display_manager.small_font, True),
+            (self.display_manager.extra_small_font, True)
+        ]
+
+        best_font = None
+        best_line_height = 8
+        best_total_height = 0
+        best_use_small = False
+
+        # Find the best font that fits all lines within available space
+        # Try fonts from largest to smallest, pick the largest that fits
+        for font, use_small in font_options:
+            # Calculate actual line height for this font
+            try:
+                line_height = self.display_manager.get_font_height(font) + 2  # Add small spacing between lines
+            except Exception:
+                # Fallback if font height calculation fails
+                if hasattr(font, 'size'):
+                    line_height = font.size + 2
+                else:
+                    line_height = 8 if use_small else 10
+
+            # Check if all lines fit within available width using actual measurements
+            max_line_width = 0
+            all_lines_fit = True
+            for line in lines:
+                try:
+                    line_width = self.display_manager.get_text_width(line, font)
+                    max_line_width = max(max_line_width, line_width)
+                    if line_width > available_text_width:
+                        all_lines_fit = False
+                        break
+                except Exception:
+                    # If measurement fails, estimate conservatively
+                    estimated_width = len(line) * (6 if use_small else 8)
+                    if estimated_width > available_text_width:
+                        all_lines_fit = False
+                        break
+                    max_line_width = max(max_line_width, estimated_width)
+
+            if not all_lines_fit:
+                continue  # This font is too big for the width
+
+            # Calculate total height needed
+            total_height = num_lines * line_height
+
+            # Check if it fits in height
+            if total_height > available_text_height:
+                continue  # This font is too tall
+
+            # This font fits both width and height - use it (largest that fits)
+            best_font = font
+            best_line_height = line_height
+            best_total_height = total_height
+            best_use_small = use_small
+            break  # Use the first (largest) font that fits
+
+        # If no font fits both constraints, use the smallest available
+        # and scale down line spacing if needed
+        if best_font is None:
+            # Use smallest font
+            best_font = self.display_manager.extra_small_font
+            best_use_small = True
+            
+            # Calculate line height for smallest font
+            try:
+                best_line_height = self.display_manager.get_font_height(best_font) + 2
+            except Exception:
+                # Fallback if font height calculation fails
+                if hasattr(best_font, 'size'):
+                    best_line_height = best_font.size + 2
+                else:
+                    best_line_height = 8
+
+            best_total_height = num_lines * best_line_height
+
+            # If still too tall, reduce line spacing (but don't go below font size)
+            if best_total_height > available_text_height:
+                min_line_height = best_line_height - 2  # Don't reduce below font size
+                max_allowed_line_height = available_text_height // num_lines
+                best_line_height = max(min_line_height, max_allowed_line_height)
+                best_total_height = best_line_height * num_lines
+
+        # Calculate starting Y position to center vertically
+        start_y = (height - best_total_height) // 2
+
+        return {
+            'font': best_font,
+            'line_height': best_line_height,
+            'total_text_height': best_total_height,
+            'start_y': start_y,
+            'use_small_font': best_use_small
+        }
     
     def _draw_tree_programmatic(self, width: int, height: int, color: Tuple[int, int, int]) -> Image.Image:
         """
@@ -249,7 +374,12 @@ class ChristmasCountdownPlugin(BasePlugin):
             new_height = int(img_height * scale_ratio)
             
             # Resize image preserving aspect ratio
-            resized = self.tree_image.resize((new_width, new_height), Image.LANCZOS)
+            try:
+                # Try new PIL API first
+                resized = self.tree_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            except AttributeError:
+                # Fall back to old PIL API
+                resized = self.tree_image.resize((new_width, new_height), Image.LANCZOS)
             
             # If the image has transparency, ensure it's RGBA
             if resized.mode != 'RGBA' and self.tree_image.mode == 'RGBA':
@@ -301,14 +431,25 @@ class ChristmasCountdownPlugin(BasePlugin):
             width = self.display_manager.width
             height = self.display_manager.height
             
-            # Determine if display is "small" (use XMAS instead of CHRISTMAS)
-            is_small_display = width < 64
+            # Calculate available text width (right half minus margins)
+            left_half_width = width // 2
+            right_half_width = width - left_half_width
+            available_text_width = right_half_width - 4  # Small margin
+            
+            # Determine if "CHRISTMAS" fits in available space
+            # Check with the smallest font first to be conservative
+            try:
+                christmas_width = self.display_manager.get_text_width("CHRISTMAS", self.display_manager.extra_small_font)
+                use_xmas = christmas_width > available_text_width
+            except Exception:
+                # Fallback: use width-based heuristic if measurement fails
+                use_xmas = width < 64
             
             # Determine text to display
             if self.is_christmas or self.days_until_christmas == 0:
                 message = "MERRY CHRISTMAS"
             else:
-                if is_small_display:
+                if use_xmas:
                     message = f"{self.days_until_christmas} DAYS UNTIL XMAS"
                 else:
                     message = f"{self.days_until_christmas} DAYS UNTIL CHRISTMAS"
@@ -322,8 +463,7 @@ class ChristmasCountdownPlugin(BasePlugin):
             self.display_manager.clear()
             
             # Split display in half: tree on left, text on right
-            left_half_width = width // 2
-            right_half_width = width - left_half_width
+            # (left_half_width and right_half_width already calculated above)
             right_half_x = left_half_width
             
             # Calculate tree dimensions (use most of left half, leave small margin)
@@ -351,7 +491,7 @@ class ChristmasCountdownPlugin(BasePlugin):
                 lines = ["MERRY", "CHRISTMAS"]
             else:
                 # Countdown message - split intelligently
-                if is_small_display:
+                if use_xmas:
                     # "N DAYS UNTIL XMAS"
                     parts = message.split()
                     if len(parts) >= 4:
@@ -376,25 +516,37 @@ class ChristmasCountdownPlugin(BasePlugin):
                     else:
                         lines = [message]
             
-            # Calculate text positioning on right side (centered vertically)
-            num_lines = len(lines)
-            line_height = 8 if is_small_display else 10
-            total_text_height = num_lines * line_height
-            start_y = (height - total_text_height) // 2
-            
+            # Calculate optimal text layout based on display size
+            layout = self._calculate_text_layout(width, height, lines)
+
             # Draw each line of text, centered horizontally in right half
             for i, line in enumerate(lines):
-                text_y = start_y + (i * line_height)
+                text_y = layout['start_y'] + (i * layout['line_height'])
                 # Calculate center point of right half for centering
                 right_half_center_x = right_half_x + (right_half_width // 2)
-                self.display_manager.draw_text(
-                    line,
-                    x=right_half_center_x,
-                    y=text_y,
-                    color=self.text_color,
-                    small_font=is_small_display,
-                    centered=True
-                )
+
+                # Use the calculated font
+                if layout['font'] == self.display_manager.extra_small_font:
+                    # For extra small font, we need to handle it specially since draw_text doesn't support it directly
+                    # We'll use the font parameter
+                    self.display_manager.draw_text(
+                        line,
+                        x=right_half_center_x,
+                        y=text_y,
+                        color=self.text_color,
+                        font=layout['font'],
+                        centered=True
+                    )
+                else:
+                    # Use the small_font parameter for regular/small fonts
+                    self.display_manager.draw_text(
+                        line,
+                        x=right_half_center_x,
+                        y=text_y,
+                        color=self.text_color,
+                        small_font=layout['use_small_font'],
+                        centered=True
+                    )
             
             # Update the physical display
             self.display_manager.update_display()
